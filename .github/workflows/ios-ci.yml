@@ -18,7 +18,7 @@ jobs:
       - name: Verify iOS 26 SDK and Xcode
         run: |
           xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version | grep '^26\\.'
+          xcrun --sdk iphoneos --show-sdk-version | grep '^26'
           xcrun simctl list devices available
 
       - name: Checkout ByMeVPN
