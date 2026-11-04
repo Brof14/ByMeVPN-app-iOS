@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 enum Screen: Hashable {
     case signIn, signUp, home, settings, advanced, account, accountSettings
