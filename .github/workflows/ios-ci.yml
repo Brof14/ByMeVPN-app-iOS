@@ -1,0 +1,81 @@
+name: iOS Build & Tests
+on:
+  pull_request:
+  push:
+    branches: [main, feat/native-swiftui-parity]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 65
+    steps:
+      - name: Checkout ByMeVPN
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned sing-box source
+        uses: actions/checkout@v4
+        with:
+          repository: SagerNet/sing-box
+          ref: v1.13.14
+          path: .vendor/sing-box
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .vendor/sing-box/go.mod
+          cache: false
+
+      - name: Build native iOS Libbox from pinned upstream
+        working-directory: .vendor/sing-box
+        run: |
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.13
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.13
+          "$(go env GOPATH)/bin/gomobile" init
+          go run ./cmd/internal/build_libbox -target apple -platform ios
+          test -d Libbox.xcframework
+          mkdir -p ../../Frameworks
+          cp -R Libbox.xcframework ../../Frameworks/Libbox.xcframework
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build for iOS Simulator (no signing)
+        run: |
+          xcodebuild build \
+            -project ByMeVPN.xcodeproj \
+            -scheme ByMeVPN \
+            -configuration Debug \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath build/DerivedData
+
+      - name: Build for iPhone (unsigned)
+        run: |
+          xcodebuild build \
+            -project ByMeVPN.xcodeproj \
+            -scheme ByMeVPN \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath build/DerivedData
+
+      - name: Unit tests on simulator
+        run: |
+          xcodebuild test \
+            -project ByMeVPN.xcodeproj \
+            -scheme ByMeVPN \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,name=iPhone 16" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath build/DerivedData
