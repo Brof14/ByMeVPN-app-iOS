@@ -116,6 +116,7 @@ final class ByMeStore: ObservableObject {
         let generation = telegramGeneration
         do {
             let session = try await api.createTelegramSession()
+            guard !Task.isCancelled, telegramGeneration == generation else { return }
             telegramPending = true
             #if canImport(UIKit)
             await UIApplication.shared.open(session.botURL)
