@@ -28,6 +28,7 @@ final class ByMeStore: ObservableObject {
 
     let vpn = VPNController()
     private var telegramTask: Task<Void, Never>?
+    private var telegramGeneration = 0
     private var pendingConnect = false
     private var planLoadGeneration = 0
     private let api = ByMeAPI.shared
@@ -111,6 +112,8 @@ final class ByMeStore: ObservableObject {
 
     func loginViaTelegram() async {
         guard telegramTask == nil else { return }
+        telegramGeneration += 1
+        let generation = telegramGeneration
         do {
             let session = try await api.createTelegramSession()
             telegramPending = true
@@ -119,12 +122,18 @@ final class ByMeStore: ObservableObject {
             #endif
             telegramTask = Task { [weak self] in
                 guard let self else { return }
-                defer { self.telegramPending = false; self.telegramTask = nil }
+                defer {
+                    if self.telegramGeneration == generation {
+                        self.telegramPending = false
+                        self.telegramTask = nil
+                    }
+                }
                 var transientRetries = 0
                 for _ in 0..<45 {
                     if Task.isCancelled { return }
                     do {
                         let (status, auth) = try await self.api.pollTelegram(session.token)
+                        guard !Task.isCancelled, self.telegramGeneration == generation else { return }
                         if status == "authenticated", let auth {
                             self.user = auth.user
                             self.subscription = auth.subscription
@@ -146,6 +155,7 @@ final class ByMeStore: ObservableObject {
     }
 
     func cancelTelegram() {
+        telegramGeneration += 1
         telegramTask?.cancel()
         telegramTask = nil
         telegramPending = false
