@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AccountView: View {
     @EnvironmentObject private var store: ByMeStore
