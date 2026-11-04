@@ -55,6 +55,7 @@ targets:
     dependencies:
       - framework: Frameworks/Libbox.xcframework
       - sdk: SystemConfiguration.framework
+      - sdk: UIKit.framework
     entitlements:
       path: PacketTunnel/ByMeVPNPacketTunnel.entitlements
       properties:
