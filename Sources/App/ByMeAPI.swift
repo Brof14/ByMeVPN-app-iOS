@@ -46,8 +46,10 @@ actor ByMeAPI {
         if !(200...299).contains(http.statusCode) {
             let detail = Wire.object(json["detail"])
             let nested = Wire.object(detail["error"] ?? json["error"])
+            let validation = (json["detail"] as? [JSONObject])?.first
             let message = Wire.optional(nested["message"]) ?? Wire.optional(detail["message"])
-                ?? Wire.optional(json["detail"]) ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
+                ?? Wire.optional(validation?["msg"]) ?? Wire.optional(json["detail"])
+                ?? Wire.optional(json["error"]) ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
             throw ByMeError.http(http.statusCode, message)
         }
         return json
@@ -145,14 +147,24 @@ actor ByMeAPI {
     func me() async throws -> AppUser { AppUser(try await request("GET", "/me")) }
     func subscription() async throws -> Subscription { Subscription(try await request("GET", "/subscription/status")) }
     func activateTrial() async throws -> Subscription {
-        Subscription(try await request("POST", "/subscription/trial", body: [
-            "install_id": vault.installID, "device_model": "iPhone"
-        ]))
+        do {
+            return Subscription(try await request("POST", "/subscription/trial", body: [
+                "install_id": vault.installID, "device_model": "iPhone"
+            ]))
+        } catch {
+            // A first activation may succeed on the server even if its response is lost.
+            if let current = try? await subscription(), current.status.lowercased() == "trial", current.isActive {
+                return current
+            }
+            throw error
+        }
     }
 
     func servers() async throws -> [ServerNode] {
         let json = try await request("GET", "/servers")
-        return (json["servers"] as? [JSONObject] ?? []).map(ServerNode.init).filter { !$0.code.isEmpty }
+        var seen = Set<String>()
+        return (json["servers"] as? [JSONObject] ?? []).map(ServerNode.init)
+            .filter { !$0.code.isEmpty && seen.insert($0.code).inserted }
     }
 
     func startVPNSession(node: String) async throws -> VPNSession {
@@ -172,6 +184,7 @@ actor ByMeAPI {
         let json = try await request("GET", "/mobile/v2/plans?devices=\(devices)")
         let plans = (json["raw_array"] as? [JSONObject]) ?? (json["plans"] as? [JSONObject]) ?? []
         return plans.map { PricingPlan($0, catalogEnabled: Wire.bool(json["payment_enabled"])) }
+            .filter { !$0.code.isEmpty && $0.priceRub > 0 && $0.devices == devices }
     }
 
     func devices() async throws -> [Device] {
@@ -182,7 +195,7 @@ actor ByMeAPI {
     }
 
     func deleteDevice(_ id: String) async throws {
-        guard !id.isEmpty, id.allSatisfy({ $0.isNumber }) else {
+        guard !id.isEmpty, id.allSatisfy({ $0 >= "0" && $0 <= "9" }) else {
             throw ByMeError.invalidConfiguration("Invalid device identifier")
         }
         _ = try await request("DELETE", "/devices/" + id)
