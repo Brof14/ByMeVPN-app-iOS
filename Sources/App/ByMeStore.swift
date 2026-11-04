@@ -84,6 +84,7 @@ final class ByMeStore: ObservableObject {
     }
 
     func signIn(email: String, password: String) async {
+        cancelTelegram()
         await run {
             let auth = try await self.api.login(email: email, password: password)
             self.user = auth.user
@@ -96,6 +97,7 @@ final class ByMeStore: ObservableObject {
     }
 
     func signUp(name: String, email: String, password: String) async {
+        cancelTelegram()
         await run {
             let auth = try await self.api.register(name: name, email: email, password: password)
             self.user = auth.user
@@ -156,15 +158,24 @@ final class ByMeStore: ObservableObject {
             user = try await api.me()
         } catch {
             if case ByMeError.expiredSession = error {
-                user = nil; subscription = nil; nodes = []; screen = .signIn
+                await vpn.disconnect()
+                user = nil; subscription = nil; nodes = []; devices = []; plans = []
+                selectedNode = nil; screen = .signIn
             } else {
                 message = error.localizedDescription
             }
             return
         }
-        do { subscription = try await api.subscription() }
-        catch {
-            subscription = nil
+        do {
+            let current = try await api.subscription()
+            subscription = current
+            // Only a confirmed negative entitlement may tear down an existing tunnel.
+            // A temporary backend outage must not convert a valid subscription to none.
+            if !current.isActive && (vpn.isConnected || vpn.isBusy) {
+                await vpn.disconnect()
+                await api.stopVPNSession()
+            }
+        } catch {
             message = error.localizedDescription
         }
         do {
@@ -236,11 +247,16 @@ final class ByMeStore: ObservableObject {
             self.subscription = sub
             guard sub.isActive else { throw ByMeError.unavailable(self.t("Нужна активная подписка.", "An active subscription is required.")) }
             if self.nodes.isEmpty { self.nodes = try await self.api.servers() }
-            guard let code = self.selectedNode ?? self.nodes.first?.code else { throw ByMeError.unavailable(self.t("Серверы недоступны.", "No servers available.")) }
+            guard let code = (self.nodes.first { $0.code == self.selectedNode } ?? self.nodes.first)?.code else {
+                throw ByMeError.unavailable(self.t("Серверы недоступны.", "No servers available."))
+            }
+            self.selectedNode = code
             let session = try await self.api.startVPNSession(node: code)
-            let json = try SingBoxConfiguration.make(session: session, bypassRussianSites: self.bypassRU,
-                                                        dnsMode: self.dnsMode, killSwitch: self.killSwitch)
+            // Also release the server session if parsing or native configuration fails.
+            // Otherwise an unsuccessful local connection can occupy a device slot.
             do {
+                let json = try SingBoxConfiguration.make(session: session, bypassRussianSites: self.bypassRU,
+                                                         dnsMode: self.dnsMode, killSwitch: self.killSwitch)
                 try await self.vpn.connect(json: json, killSwitch: self.killSwitch, onDemand: self.connectOnDemand)
             } catch {
                 await self.api.stopVPNSession()
@@ -255,14 +271,17 @@ final class ByMeStore: ObservableObject {
         await api.stopVPNSession()
         await api.logout()
         user = nil; subscription = nil; nodes = []; devices = []; plans = []
+        selectedNode = nil
         screen = .signIn
     }
 
     func deleteAccount() async {
         await run {
             await self.vpn.disconnect()
+            await self.api.stopVPNSession()
             try await self.api.deleteAccount()
             self.user = nil; self.subscription = nil; self.nodes = []; self.devices = []
+            self.plans = []; self.selectedNode = nil
             self.screen = .signIn
         }
     }
