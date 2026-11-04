@@ -82,7 +82,7 @@ enum SharedTunnelConfig {
             throw ByMeError.unavailable("App Group is not provisioned by your Apple Developer team")
         }
         let file = directory.appendingPathComponent("tunnel.json")
-        try Data(json.utf8).write(to: file, options: [.atomic, .completeFileProtectionUnlessOpen])
+        try Data(json.utf8).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
     static func read() throws -> String {
