@@ -1,0 +1,20 @@
+# Apple / Xcode
+.DS_Store
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.ipa
+*.mobileprovision
+*.p12
+*.cer
+*.key
+*.pem
+*.xcarchive
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+ByMeVPN.xcodeproj/
+# Build artifacts / never store runtime secrets
+Frameworks/Libbox.xcframework/
+.env
+*.log
