@@ -132,9 +132,11 @@ final class ByMeStore: ObservableObject {
                 for _ in 0..<45 {
                     if Task.isCancelled { return }
                     do {
-                        let (status, auth) = try await self.api.pollTelegram(session.token)
+                        let (status, response) = try await self.api.pollTelegram(session.token)
                         guard !Task.isCancelled, self.telegramGeneration == generation else { return }
-                        if status == "authenticated", let auth {
+                        if status == "authenticated", let response {
+                            let auth = try await self.api.finishTelegramLogin(response)
+                            guard !Task.isCancelled, self.telegramGeneration == generation else { return }
                             self.user = auth.user
                             self.subscription = auth.subscription
                             self.screen = .home
