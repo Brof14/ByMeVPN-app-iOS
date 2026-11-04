@@ -149,21 +149,31 @@ final class ByMeStore: ObservableObject {
 
     func refreshAll() async {
         guard SecureStorage.shared.accessToken != nil else { return }
-        async let profile = api.me()
-        async let status = api.subscription()
-        async let servers = api.servers()
+        // Independently refresh account and entitlement. A temporary /servers
+        // outage must not discard a valid login or keep users on the sign-in screen.
         do {
-            let (newUser, newSubscription, newNodes) = try await (profile, status, servers)
-            user = newUser
-            subscription = newSubscription
-            nodes = newNodes
-            if !nodes.contains(where: { $0.code == selectedNode }) { selectedNode = nodes.first?.code }
+            user = try await api.me()
         } catch {
             if case ByMeError.expiredSession = error {
-                user = nil; subscription = nil; screen = .signIn
+                user = nil; subscription = nil; nodes = []; screen = .signIn
             } else {
                 message = error.localizedDescription
             }
+            return
+        }
+        do { subscription = try await api.subscription() }
+        catch {
+            subscription = nil
+            message = error.localizedDescription
+        }
+        do {
+            nodes = try await api.servers()
+            if !nodes.contains(where: { $0.code == selectedNode }) {
+                selectedNode = nodes.first?.code
+            }
+        } catch {
+            nodes = []
+            message = error.localizedDescription
         }
     }
 
