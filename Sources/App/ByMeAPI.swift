@@ -53,14 +53,27 @@ actor ByMeAPI {
         return json
     }
 
-    private func refresh() async -> Bool {
-        guard let old = vault.refreshToken, !old.isEmpty else { return false }
-        guard let json = try? await perform("POST", "/auth/refresh", body: ["refresh": old]) else { return false }
-        let access = Wire.string(json["access"] ?? json["access_token"])
-        guard !access.isEmpty else { return false }
-        let rotated = Wire.optional(json["refresh"] ?? json["refresh_token"]) ?? old
-        vault.setTokens(access: access, refresh: rotated)
-        return true
+    private var refreshInFlight: Task<Bool, Never>?
+
+    private func refresh(for observedAccess: String) async -> Bool {
+        if vault.accessToken != observedAccess { return vault.accessToken != nil }
+        if let existing = refreshInFlight { return await existing.value }
+        // A shared in-flight task prevents simultaneous 401 responses from rotating
+        // the same refresh token more than once.
+        let task = Task { () -> Bool in
+            guard let old = self.vault.refreshToken, !old.isEmpty else { return false }
+            guard let json = try? await self.perform("POST", "/auth/refresh", body: ["refresh": old]) else { return false }
+            let access = Wire.string(json["access"] ?? json["access_token"])
+            guard !access.isEmpty else { return false }
+            if self.vault.accessToken != observedAccess { return self.vault.accessToken != nil }
+            self.vault.setTokens(access: access,
+                                 refresh: Wire.optional(json["refresh"] ?? json["refresh_token"]) ?? old)
+            return true
+        }
+        refreshInFlight = task
+        let success = await task.value
+        refreshInFlight = nil
+        return success
     }
 
     private func request(_ method: String, _ path: String, body: JSONObject? = nil, requiresAuth: Bool = true) async throws -> JSONObject {
@@ -69,7 +82,7 @@ actor ByMeAPI {
         do {
             return try await perform(method, path, body: body, authorization: access)
         } catch ByMeError.http(401, _) {
-            guard await refresh(), let newAccess = vault.accessToken else {
+            guard await refresh(for: access), let newAccess = vault.accessToken else {
                 vault.clearSession()
                 throw ByMeError.expiredSession
             }
@@ -84,7 +97,7 @@ actor ByMeAPI {
         let refresh = Wire.optional(json["refresh"] ?? json["refresh_token"]) ?? "ref_" + access
         vault.clearSession()
         vault.setTokens(access: access, refresh: refresh)
-        return AuthPayload(user: AppUser(json), subscription: (json["subscription"] as? JSONObject).map(Subscription.init))
+        return AuthPayload(user: AppUser(json), subscription: (json["subscription"] as? JSONObject).map { Subscription($0) })
     }
 
     func login(email: String, password: String) async throws -> AuthPayload {
