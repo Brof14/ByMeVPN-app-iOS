@@ -11,7 +11,7 @@ A native SwiftUI port of [ByMeVPN for Android](https://github.com/Brof14/ByMeVPN
 - VPN manager via `NETunnelProviderManager`, Packet Tunnel Extension, native Libbox (sing-box), a server-issued `/vpn/session` config, VLESS/Reality and Hysteria2 generation, VPN stop/on-demand and user-consented VPN disclosure.
 - Russian domain bypass defaults to enabled (.ru, .рф, .su); DNS selector and VPN kill-switch settings.
 - Exact current Android shield and 1024×1024 app icon copied from its repository.
-- CI compilation and unit tests in GitHub Actions, built from a pinned upstream sing-box source.
+- CI on macOS 26 / Xcode 26: unsigned iPhone/simulator builds, model regression tests and a simulator sign-in/registration UI smoke test. Pinned sing-box is built from source.
 
 ## Important limitations (not ready to claim full parity)
 
@@ -43,3 +43,7 @@ To run on a real iPhone, configure the organization team, the bundle IDs, App Gr
 The iOS client uses Android's `https://bymevpn.duckdns.org/api/v1` base URL and its `/auth/login`, `/auth/register`, `/auth/refresh`, `/auth/telegram/*`, `/me`, `/subscription/status`, `/subscription/trial`, `/servers`, `/vpn/session`, `/devices`, and `/mobile/v2/plans?devices=...` endpoints.
 
 Secret access/refresh tokens are saved with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. VPN session JSON is stored in a protected App Group file for the Packet Tunnel Extension. Never log or commit user credentials or raw server session configurations.
+
+## Testing on iPhone 11 with iOS 26 (Windows-only workstation)
+
+See [iOS 26 acceptance and release plan](docs/IOS26_TEST_PLAN.md). CI can validate Xcode 26 compilation and simulator UI without a Mac or paid account. The uploaded artifacts are **unsigned app bundles**, not installable IPAs. An Apple-provisioned Packet Tunnel and a real iPhone network traffic test remain mandatory before declaring VPN connectivity production-ready.
