@@ -61,6 +61,7 @@ struct SignInView: View {
                 HStack {
                     Text(store.t("Нет аккаунта?", "No account?")).foregroundStyle(Brand.muted)
                     Button(store.t("Регистрация", "Sign up")) { store.navigate(.signUp) }
+                        .accessibilityIdentifier("auth.signUp")
                         .foregroundStyle(Brand.mint).fontWeight(.semibold)
                 }.font(.system(size: 13))
                 Link(store.t("Поддержка", "Support"), destination: ByMeConfiguration.supportURL)
@@ -129,7 +130,8 @@ struct SignUpView: View {
                     }
                     Button(store.t("Уже есть аккаунт? Войти", "Already have an account? Sign in")) {
                         store.navigate(.signIn)
-                    }.font(.system(size: 13)).frame(maxWidth: .infinity)
+                    }.accessibilityIdentifier("auth.signIn")
+                     .font(.system(size: 13)).frame(maxWidth: .infinity)
                 }
                 .font(.system(size: 12)).padding(.horizontal, 27).padding(.bottom, 30)
             }.scrollDismissesKeyboard(.interactively)

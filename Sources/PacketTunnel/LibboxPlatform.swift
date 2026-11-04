@@ -86,14 +86,19 @@ final class LibboxPlatform: NSObject, LibboxPlatformInterfaceProtocol {
         let lock = NSLock()
         var first = true
         newMonitor.pathUpdateHandler = { path in
-            let interface = path.availableInterfaces.first
+            // The first available interface is not necessarily the path's active one.
+            // Selecting a dormant cellular/Wi-Fi interface can break all outbound traffic.
+            let interface = path.status == .satisfied
+                ? path.availableInterfaces.first(where: { path.usesInterfaceType($0.type) })
+                : nil
+            // Core startup must observe the initial route before we unblock it.
             listener.updateDefaultInterface(
                 interface?.name ?? "", interfaceIndex: Int32(interface?.index ?? -1),
                 isExpensive: path.isExpensive, isConstrained: path.isConstrained
             )
             lock.lock()
-            defer { lock.unlock() }
             if first { first = false; initialUpdate.signal() }
+            lock.unlock()
         }
         newMonitor.start(queue: DispatchQueue(label: "com.bymevpn.ios.path", qos: .utility))
         guard initialUpdate.wait(timeout: .now() + 10) == .success else {

@@ -14,7 +14,7 @@ enum Wire {
     static func object(_ value: Any?) -> JSONObject { value as? JSONObject ?? [:] }
     static func string(_ value: Any?) -> String {
         guard let value, !(value is NSNull) else { return "" }
-        if let string = value as? String { return string }
+        if let string = value as? String { return string == "null" ? "" : string }
         if let number = value as? NSNumber { return number.stringValue }
         return ""
     }
@@ -75,14 +75,38 @@ struct Subscription: Equatable {
         receivedAt = now
     }
 
+    private var parsedExpiry: Date? {
+        guard let expiry, !expiry.isEmpty else { return nil }
+        if let seconds = TimeInterval(expiry), seconds > 1_000_000_000 {
+            return Date(timeIntervalSince1970: seconds)
+        }
+        // Only timestamps with an explicit timezone are interpreted as absolute.
+        // Treating a naive backend-local timestamp as UTC would wrongly expire access.
+        let dateFormats: [ISO8601DateFormatter.Options] = [
+            [.withInternetDateTime, .withFractionalSeconds], [.withInternetDateTime]
+        ]
+        for options in dateFormats {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = options
+            if let date = formatter.date(from: expiry) { return date }
+        }
+        return nil
+    }
+
     var isActive: Bool {
-        guard ["active", "trial", "grace"].contains(status) else { return false }
+        guard ["active", "trial", "grace"].contains(status.lowercased()) else { return false }
+        if let parsedExpiry, parsedExpiry <= Date() { return false }
         return secondsRemaining == 0 || Date().timeIntervalSince(receivedAt) < Double(secondsRemaining)
     }
     var remainingDays: Int? {
-        guard secondsRemaining > 0 else { return nil }
-        let remaining = max(0, secondsRemaining - Int(max(0, Date().timeIntervalSince(receivedAt))))
-        return remaining == 0 ? nil : (remaining + 86_399) / 86_400
+        let remaining: TimeInterval
+        if secondsRemaining > 0 {
+            remaining = Double(secondsRemaining) - max(0, Date().timeIntervalSince(receivedAt))
+        } else if let parsedExpiry {
+            remaining = parsedExpiry.timeIntervalSinceNow
+        } else { return nil }
+        guard remaining > 0 else { return nil }
+        return Int(ceil(remaining / 86_400))
     }
 }
 
@@ -134,11 +158,9 @@ struct ServerNode: Identifiable, Equatable {
         config = (json["config"] as? JSONObject).flatMap { try? VPNSession($0) }
     }
     var flag: String {
-        let codes = countryCode.unicodeScalars.map { scalar -> String in
-            guard scalar.value >= 65 && scalar.value <= 90 else { return "" }
-            return String(UnicodeScalar(127397 + scalar.value)!)
-        }
-        return codes.joined().isEmpty ? "🌐" : codes.joined()
+        guard countryCode.unicodeScalars.count == 2,
+              countryCode.unicodeScalars.allSatisfy({ (65...90).contains($0.value) }) else { return "🌐" }
+        return countryCode.unicodeScalars.map { String(UnicodeScalar(127397 + $0.value)!) }.joined()
     }
     func displayName(_ ru: Bool) -> String {
         if !label.isEmpty { return label }
@@ -158,7 +180,7 @@ struct Device: Identifiable, Equatable {
     init?(_ json: JSONObject, installID: String) {
         let id = Wire.string(json["id"] ?? json["device_id"] ?? json["hwid_id"])
         // Mirror Android: deleting devices requires a real numeric backend ID.
-        guard !id.isEmpty, id.allSatisfy({ $0.isNumber }) else { return nil }
+        guard !id.isEmpty, id.allSatisfy({ $0 >= "0" && $0 <= "9" }) else { return nil }
         self.id = id
         name = Wire.optional(json["device_model"]) ?? Wire.optional(json["device_name"]) ?? "Device"
         platform = Wire.optional(json["platform"]) ?? "Unknown"

@@ -12,9 +12,15 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 65
     steps:
+      - name: Verify iOS 26 SDK and Xcode
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version | grep '^26'
+          xcrun simctl list devices available
+
       - name: Checkout ByMeVPN
         uses: actions/checkout@v4
 
@@ -77,7 +83,18 @@ jobs:
             -project ByMeVPN.xcodeproj \
             -scheme ByMeVPN \
             -configuration Debug \
-            -destination "platform=iOS Simulator,name=iPhone 16" \
+            -destination "platform=iOS Simulator,name=iPhone 17" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             -derivedDataPath build/DerivedData
+
+      - name: Publish unsigned build outputs for review (not installable IPA)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bymevpn-ios26-unsigned-builds
+          path: |
+            build/DerivedData/Build/Products/Debug-iphonesimulator/ByMeVPN.app
+            build/DerivedData/Build/Products/Release-iphoneos/ByMeVPN.app
+          if-no-files-found: warn
+          retention-days: 7

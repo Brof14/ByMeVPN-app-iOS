@@ -21,7 +21,7 @@ struct PricingView: View {
     @EnvironmentObject private var store: ByMeStore
     @State private var tier = 2
     @State private var duration: PlanDuration = .month15
-    @State private var loadingCatalog = false
+    @State private var loadingTier: Int?
 
     private var selectedPlan: PricingPlan? {
         store.plans.first {
@@ -38,7 +38,6 @@ struct PricingView: View {
                 ForEach([2, 5, 10], id: \.self) { count in
                     Button {
                         tier = count
-                        Task { await reload() }
                     } label: {
                         Text("\(count) \(store.t("устр.", "devices"))")
                             .font(.system(size: 12, weight: .semibold))
@@ -86,7 +85,7 @@ struct PricingView: View {
                         .stroke(duration == period ? Brand.mint : Brand.border, lineWidth: 1))
                 }.buttonStyle(.plain)
             }
-            if loadingCatalog {
+            if loadingTier == tier {
                 ProgressView().tint(Brand.mint).frame(maxWidth: .infinity)
             }
             CardSurface {
@@ -99,18 +98,18 @@ struct PricingView: View {
                 Text(store.t("Тарифы и цены подтверждаются сервером. Оплата в iOS будет доступна после интеграции StoreKit и серверной проверки покупок.",
                              "Plans and prices are server-confirmed. iOS checkout requires StoreKit and server-side purchase verification."))
                     .font(.system(size: 12)).foregroundStyle(Brand.muted)
-                ByMeButton(title: store.t("Обновить тарифы", "Refresh plans"), secondary: true, busy: loadingCatalog) {
+                ByMeButton(title: store.t("Обновить тарифы", "Refresh plans"), secondary: true, busy: loadingTier == tier) {
                     Task { await reload() }
                 }
             }
         }
-        .onAppear { Task { await reload() } }
+        .task(id: tier) { await reload() }
     }
 
     private func reload() async {
-        guard !loadingCatalog else { return }
-        loadingCatalog = true
-        defer { loadingCatalog = false }
-        await store.loadPlans(devices: tier)
+        let requestedTier = tier
+        loadingTier = requestedTier
+        defer { if loadingTier == requestedTier { loadingTier = nil } }
+        await store.loadPlans(devices: requestedTier)
     }
 }
