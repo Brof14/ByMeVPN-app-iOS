@@ -82,9 +82,10 @@ struct Subscription: Equatable {
         }
         // Only timestamps with an explicit timezone are interpreted as absolute.
         // Treating a naive backend-local timestamp as UTC would wrongly expire access.
-        for options: ISO8601DateFormatter.Options in [
+        let dateFormats: [ISO8601DateFormatter.Options] = [
             [.withInternetDateTime, .withFractionalSeconds], [.withInternetDateTime]
-        ] {
+        ]
+        for options in dateFormats {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = options
             if let date = formatter.date(from: expiry) { return date }
