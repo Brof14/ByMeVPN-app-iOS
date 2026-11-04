@@ -71,8 +71,16 @@ final class VPNController: ObservableObject {
         #endif
     }
 
-    func disconnect() {
-        manager?.connection.stopVPNTunnel()
+    func disconnect() async {
+        // Disable on-demand before stopping to avoid reconnect after explicit
+        // disconnect or sign-out. Next connect re-applies the user's preference.
+        if let manager {
+            manager.isOnDemandEnabled = false
+            manager.onDemandRules = []
+            try? await manager.saveToPreferences()
+            try? await manager.loadFromPreferences()
+            manager.connection.stopVPNTunnel()
+        }
         status = manager?.connection.status ?? .disconnected
         SharedTunnelConfig.clear()
     }
