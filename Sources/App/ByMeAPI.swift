@@ -129,7 +129,7 @@ actor ByMeAPI {
         return TelegramSession(token: token, botURL: url)
     }
 
-    func pollTelegram(_ token: String) async throws -> (String, AuthPayload?) {
+    func pollTelegram(_ token: String) async throws -> (String, JSONObject?) {
         let json: JSONObject
         do {
             json = try await request("POST", "/auth/telegram/check-session", body: ["token": token], requiresAuth: false)
@@ -141,7 +141,14 @@ actor ByMeAPI {
         }
         let status = Wire.string(json["status"]).lowercased()
         guard ["pending", "authenticated", "expired"].contains(status) else { throw ByMeError.invalidResponse }
-        return (status, status == "authenticated" ? try persistAuth(json) : nil)
+        // Polling must not mutate Keychain: an old request can finish after the user
+        // cancels Telegram or starts an email login. Commit only after caller checks identity.
+        return (status, status == "authenticated" ? json : nil)
+    }
+
+    func finishTelegramLogin(_ response: JSONObject) throws -> AuthPayload {
+        guard !Task.isCancelled else { throw CancellationError() }
+        return try persistAuth(response)
     }
 
     func me() async throws -> AppUser { AppUser(try await request("GET", "/me")) }
