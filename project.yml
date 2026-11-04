@@ -1,0 +1,75 @@
+name: ByMeVPN
+options:
+  bundleIdPrefix: com.bymevpn
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    DEVELOPMENT_TEAM: ""
+targets:
+  ByMeVPN:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/App
+      - path: Sources/Shared
+    resources:
+      - path: App/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bymevpn.ios
+        INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        SUPPORTS_MACCATALYST: NO
+    dependencies:
+      - target: ByMeVPNPacketTunnel
+        embed: true
+    entitlements:
+      path: App/ByMeVPN.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        com.apple.security.application-groups:
+          - group.com.bymevpn.ios
+  ByMeVPNPacketTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/PacketTunnel
+      - path: Sources/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bymevpn.ios.PacketTunnel
+        INFOPLIST_FILE: PacketTunnel/Info.plist
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGN_STYLE: Automatic
+        OTHER_LDFLAGS:
+          - -lresolv
+    dependencies:
+      - framework: Frameworks/Libbox.xcframework
+      - sdk: SystemConfiguration.framework
+    entitlements:
+      path: PacketTunnel/ByMeVPNPacketTunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+        com.apple.security.application-groups:
+          - group.com.bymevpn.ios
+  ByMeVPNTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: ByMeVPN
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bymevpn.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
