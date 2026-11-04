@@ -29,6 +29,7 @@ final class ByMeStore: ObservableObject {
     let vpn = VPNController()
     private var telegramTask: Task<Void, Never>?
     private var pendingConnect = false
+    private var planLoadGeneration = 0
     private let api = ByMeAPI.shared
 
     var ru: Bool { L10n.isRussian(language) }
@@ -203,9 +204,19 @@ final class ByMeStore: ObservableObject {
     }
 
     func loadPlans(devices: Int) async {
+        planLoadGeneration += 1
+        let generation = planLoadGeneration
         plans = []
-        do { plans = try await api.plans(devices: devices) }
-        catch { message = t("Каталог тарифов недоступен: ", "Plan catalog unavailable: ") + error.localizedDescription }
+        do {
+            let result = try await api.plans(devices: devices)
+            guard !Task.isCancelled, generation == planLoadGeneration else { return }
+            plans = result
+        } catch is CancellationError {
+            // Changing the device tier cancels the obsolete catalog request.
+        } catch {
+            guard !Task.isCancelled, generation == planLoadGeneration else { return }
+            message = t("Каталог тарифов недоступен: ", "Plan catalog unavailable: ") + error.localizedDescription
+        }
     }
 
     func activateTrial() async {
