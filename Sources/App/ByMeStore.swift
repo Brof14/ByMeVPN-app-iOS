@@ -207,7 +207,7 @@ final class ByMeStore: ObservableObject {
 
     func toggleVPN() async {
         if vpn.isConnected || vpn.isBusy {
-            vpn.disconnect()
+            await vpn.disconnect()
             await api.stopVPNSession()
             return
         }
@@ -250,7 +250,7 @@ final class ByMeStore: ObservableObject {
     }
 
     func signOut() async {
-        vpn.disconnect()
+        await vpn.disconnect()
         cancelTelegram()
         await api.stopVPNSession()
         await api.logout()
@@ -260,7 +260,7 @@ final class ByMeStore: ObservableObject {
 
     func deleteAccount() async {
         await run {
-            self.vpn.disconnect()
+            await self.vpn.disconnect()
             try await self.api.deleteAccount()
             self.user = nil; self.subscription = nil; self.nodes = []; self.devices = []
             self.screen = .signIn
